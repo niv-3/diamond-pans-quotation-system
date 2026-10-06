@@ -1,3 +1,4 @@
+import uuid
 import streamlit as st
 
 from calculator import calculate_standard_cut
@@ -130,7 +131,14 @@ if st.button(
             offcut_value_override=manual_offcut_value,
         )
 
+        # Every quotation item gets its own permanent ID.
+        # This prevents Streamlit from reusing the selling
+        # price from a previous item.
+        item_id = str(uuid.uuid4())
+
         item = {
+            "id": item_id,
+
             "original_length": length,
             "original_width": width,
 
@@ -140,7 +148,7 @@ if st.button(
             "thickness": thickness,
             "quantity": quantity,
 
-            # Keep original business calculation
+            # Original price calculated by the business logic
             "calculated_unit_price":
                 result["unit_price"],
 
@@ -167,12 +175,10 @@ if st.button(
                 result["calculation_mode"],
         }
 
-        st.session_state.quotation_items.append(
-            item
-        )
+        st.session_state.quotation_items.append(item)
 
-        # A new item means the total must
-        # be calculated again.
+        # New item means quotation total
+        # needs to be calculated again.
         st.session_state.total_calculated = False
 
         st.rerun()
@@ -216,7 +222,7 @@ else:
 
 
         # --------------------------------------------------
-        # EDITABLE PRICE
+        # EDITABLE CUSTOMER PRICE
         # --------------------------------------------------
 
         selling_price = st.number_input(
@@ -224,13 +230,12 @@ else:
             min_value=0.0,
             value=float(item["unit_price"]),
             step=100.0,
-            key=f"selling_price_{index}",
+            key=f'selling_price_{item["id"]}',
         )
 
 
-        # If she changes the selling price,
-        # hide the old total until Calculate Total
-        # is pressed again.
+        # If selling price changes, store the new value
+        # and invalidate the previously calculated total.
         if selling_price != item["unit_price"]:
 
             item["unit_price"] = selling_price
@@ -299,12 +304,17 @@ else:
 
         if st.button(
             "Remove Item",
-            key=f"remove_{index}",
+            key=f'remove_{item["id"]}',
         ):
 
-            st.session_state.quotation_items.pop(
-                index
-            )
+            # Remove the widget state belonging
+            # to this specific item.
+            price_key = f'selling_price_{item["id"]}'
+
+            if price_key in st.session_state:
+                del st.session_state[price_key]
+
+            st.session_state.quotation_items.pop(index)
 
             st.session_state.total_calculated = False
 
@@ -399,13 +409,22 @@ else:
 
 
     # ==================================================
-    # CLEAR
+    # CLEAR QUOTATION
     # ==================================================
 
     if st.button(
         "Clear Quotation",
         use_container_width=True,
     ):
+
+        # Remove selling-price widget state
+        # for all existing quotation items.
+        for item in st.session_state.quotation_items:
+
+            price_key = f'selling_price_{item["id"]}'
+
+            if price_key in st.session_state:
+                del st.session_state[price_key]
 
         st.session_state.quotation_items = []
 
