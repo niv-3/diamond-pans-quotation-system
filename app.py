@@ -1,50 +1,60 @@
 import streamlit as st
-from pdf_generator import generate_quotation_pdf
+
 from calculator import calculate_standard_cut
-from offcut import split_remaining_sheet, evaluate_offcut
+from pdf_generator import generate_quotation_pdf
 
 
 st.set_page_config(
-    page_title="Fabrication Quotation Calculator",
+    page_title="Diamond Pans Quotation Calculator",
     page_icon="📐",
     layout="centered",
 )
 
-st.title("Fabrication Quotation Calculator")
+st.title("Diamond Pans Quotation Calculator")
 st.caption("Create customer fabrication quotations.")
 
 
-# --------------------------------------------------
-# QUOTATION STORAGE
-# --------------------------------------------------
+# ==================================================
+# SESSION STATE
+# ==================================================
 
 if "quotation_items" not in st.session_state:
     st.session_state.quotation_items = []
 
+if "quotation_calculated" not in st.session_state:
+    st.session_state.quotation_calculated = False
 
-# --------------------------------------------------
+
+# ==================================================
 # CUSTOMER DETAILS
-# --------------------------------------------------
+# ==================================================
 
 st.subheader("Customer Details")
 
-customer_name = st.text_input("Customer Name")
+customer_name = st.text_input(
+    "Customer Name"
+)
 
 customer_phone = st.text_input(
     "Phone Number",
-    placeholder="Optional"
+    placeholder="Optional",
 )
 
 
-# --------------------------------------------------
-# ORDER ITEM
-# --------------------------------------------------
+# ==================================================
+# ADD ORDER ITEM
+# ==================================================
 
 st.subheader("Add Order Item")
 
 thickness = st.selectbox(
     "Material Thickness",
-    ["1.5mm", "1.8mm", "2mm", "2.5mm"],
+    [
+        "1.5mm",
+        "1.8mm",
+        "2mm",
+        "2.5mm",
+    ],
 )
 
 col1, col2 = st.columns(2)
@@ -71,9 +81,9 @@ quantity = st.number_input(
 )
 
 
-# --------------------------------------------------
+# ==================================================
 # OFFCUT METHOD
-# --------------------------------------------------
+# ==================================================
 
 st.write("### Offcut Method")
 
@@ -90,129 +100,177 @@ manual_offcut_value = None
 if calculation_method == "Manual — Enter offcut value":
 
     manual_offcut_value = st.number_input(
-        "Usable remaining material value (₦)",
+        "Usable remaining material value per item (₦)",
         min_value=0.0,
         value=0.0,
         step=100.0,
     )
 
 
-# --------------------------------------------------
-# PREVIEW / ADD ITEM
-# --------------------------------------------------
+# ==================================================
+# ADD ITEM
+# ==================================================
 
-try:
+if st.button(
+    "➕ Add Item",
+    type="primary",
+    use_container_width=True,
+):
 
-    preview = calculate_standard_cut(
-        length=length,
-        width=width,
-        thickness=thickness,
-        quantity=quantity,
-        offcut_value_override=manual_offcut_value,
-    )
+    try:
 
-    st.write("### Price Preview")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "Unit Price",
-            f'₦{preview["unit_price"]:,.0f}',
+        result = calculate_standard_cut(
+            length=length,
+            width=width,
+            thickness=thickness,
+            quantity=quantity,
+            offcut_value_override=manual_offcut_value,
         )
-
-    with col2:
-        st.metric(
-            "Line Total",
-            f'₦{preview["total_price"]:,.0f}',
-        )
-
-
-    with st.expander("Calculation Details"):
-
-        st.write(
-            f'Normalized size: '
-            f'{preview["length"]:g}" × '
-            f'{preview["width"]:g}"'
-        )
-
-        st.write(
-            f'Material price: '
-            f'₦{preview["raw_price"]:,.0f}'
-        )
-
-        st.write(
-            f'Standard 4" belts: '
-            f'{preview["total_belts"]}'
-        )
-
-        st.write(
-            f'Standard offcut value: '
-            f'₦{preview["standard_offcut_value"]:,.0f}'
-        )
-
-        st.write(
-            f'Final offcut value: '
-            f'₦{preview["final_offcut_value"]:,.0f}'
-        )
-
-
-    if st.button(
-        "➕ Add Item to Quotation",
-        type="primary",
-        use_container_width=True,
-    ):
 
         item = {
             "original_length": length,
             "original_width": width,
-            "length": preview["length"],
-            "width": preview["width"],
+
+            "length": result["length"],
+            "width": result["width"],
+
             "thickness": thickness,
             "quantity": quantity,
-            "unit_price": preview["unit_price"],
-            "total_price": preview["total_price"],
-            "offcut_value": preview["final_offcut_value"],
-            "calculation_mode": preview["calculation_mode"],
+
+            "unit_price": result["unit_price"],
+            "total_price": result["total_price"],
+
+            "raw_price": result["raw_price"],
+
+            "total_belts": result["total_belts"],
+
+            "standard_offcut_value":
+                result["standard_offcut_value"],
+
+            "offcut_value":
+                result["final_offcut_value"],
+
+            "calculation_mode":
+                result["calculation_mode"],
         }
 
-        st.session_state.quotation_items.append(item)
+        st.session_state.quotation_items.append(
+            item
+        )
 
-        st.success("Item added to quotation.")
+        # If another item is added,
+        # quotation must be recalculated.
+        st.session_state.quotation_calculated = False
 
         st.rerun()
 
+    except ValueError as error:
 
-except ValueError as error:
-
-    st.error(str(error))
+        st.error(str(error))
 
 
-# --------------------------------------------------
-# CURRENT QUOTATION
-# --------------------------------------------------
+# ==================================================
+# QUOTATION AREA
+# ==================================================
 
 st.divider()
 
-st.subheader("Current Quotation")
-
 if not st.session_state.quotation_items:
 
-    st.info("No items added yet.")
+    st.subheader("Current Quotation")
+
+    st.info(
+        "No items added yet."
+    )
+
 
 else:
 
-    grand_total = 0
+    # ==================================================
+    # BEFORE CALCULATION
+    # ==================================================
 
-    for index, item in enumerate(
-        st.session_state.quotation_items
-    ):
+    if not st.session_state.quotation_calculated:
 
-        grand_total += item["total_price"]
+        st.subheader("Current Quotation")
 
-        col1, col2 = st.columns([4, 1])
+        for index, item in enumerate(
+            st.session_state.quotation_items
+        ):
 
-        with col1:
+            col1, col2 = st.columns(
+                [4, 1]
+            )
+
+            with col1:
+
+                st.write(
+                    f'**{index + 1}. '
+                    f'{item["original_length"]:g}" × '
+                    f'{item["original_width"]:g}" '
+                    f'({item["thickness"]})**'
+                )
+
+                st.write(
+                    f'Quantity: '
+                    f'{item["quantity"]}'
+                )
+
+            with col2:
+
+                if st.button(
+                    "Remove",
+                    key=f"remove_{index}",
+                ):
+
+                    st.session_state.quotation_items.pop(
+                        index
+                    )
+
+                    st.session_state.quotation_calculated = False
+
+                    st.rerun()
+
+            st.divider()
+
+
+        # ----------------------------------------------
+        # CALCULATE BUTTON
+        # ----------------------------------------------
+
+        if st.button(
+            "🧮 Calculate Quotation",
+            type="primary",
+            use_container_width=True,
+        ):
+
+            st.session_state.quotation_calculated = True
+
+            st.rerun()
+
+
+    # ==================================================
+    # AFTER CALCULATION
+    # ==================================================
+
+    else:
+
+        st.subheader("Quotation")
+
+        grand_total = 0
+
+
+        # ----------------------------------------------
+        # CALCULATED ITEMS
+        # ----------------------------------------------
+
+        for index, item in enumerate(
+            st.session_state.quotation_items
+        ):
+
+            grand_total += item[
+                "total_price"
+            ]
 
             st.write(
                 f'**{index + 1}. '
@@ -224,50 +282,106 @@ else:
             st.write(
                 f'Qty {item["quantity"]} × '
                 f'₦{item["unit_price"]:,.0f} '
-                f'= **₦{item["total_price"]:,.0f}**'
+                f'= '
+                f'**₦{item["total_price"]:,.0f}**'
             )
 
-        with col2:
 
-            if st.button(
-                "Remove",
-                key=f"remove_{index}",
+            # ------------------------------------------
+            # CALCULATION DETAILS
+            # ------------------------------------------
+
+            with st.expander(
+                "View calculation details"
             ):
 
-                st.session_state.quotation_items.pop(index)
+                st.write(
+                    'Raw pan: '
+                    '4ft × 8ft '
+                    '(96" × 48")'
+                )
 
-                st.rerun()
+                st.write(
+                    f'Thickness: '
+                    f'{item["thickness"]}'
+                )
 
-        st.divider()
+                st.write(
+                    f'Material price: '
+                    f'₦{item["raw_price"]:,.0f}'
+                )
+
+                st.write(
+                    f'Standard 4" belts recovered: '
+                    f'{item["total_belts"]}'
+                )
+
+                st.write(
+                    f'Standard offcut value: '
+                    f'₦{item["standard_offcut_value"]:,.0f}'
+                )
+
+                st.write(
+                    f'Final offcut value used: '
+                    f'₦{item["offcut_value"]:,.0f}'
+                )
+
+                st.write(
+                    f'Calculation method: '
+                    f'{item["calculation_mode"]}'
+                )
+
+            st.divider()
 
 
-    st.metric(
-        "Grand Total",
-        f"₦{grand_total:,.0f}",
-    )
+        # ==================================================
+        # GRAND TOTAL
+        # ==================================================
 
-    st.metric(
-        "Grand Total",
-        f"₦{grand_total:,.0f}",
-    )
+        st.metric(
+            "Grand Total",
+            f"₦{grand_total:,.0f}",
+        )
 
-    # --------------------------------------------------
-    # PDF QUOTATION
-    # --------------------------------------------------
 
-    pdf_data, quotation_number = generate_quotation_pdf(
-        customer_name=customer_name,
-        customer_phone=customer_phone,
-        items=st.session_state.quotation_items,
-    )
+        # ==================================================
+        # PDF
+        # ==================================================
 
-    st.download_button(
-        label="📄 Download Quotation PDF",
-        data=pdf_data,
-        file_name=f"{quotation_number}.pdf",
-        mime="application/pdf",
-        use_container_width=True,
-    )
+        pdf_data, quotation_number = (
+            generate_quotation_pdf(
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                items=st.session_state.quotation_items,
+            )
+        )
+
+        st.download_button(
+            label="📄 Download / Print Quotation PDF",
+            data=pdf_data,
+            file_name=f"{quotation_number}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+
+        # ----------------------------------------------
+        # EDIT QUOTATION
+        # ----------------------------------------------
+
+        if st.button(
+            "✏️ Edit Quotation",
+            use_container_width=True,
+        ):
+
+            st.session_state.quotation_calculated = False
+
+            st.rerun()
+
+
+    # ==================================================
+    # CLEAR QUOTATION
+    # ==================================================
 
     if st.button(
         "Clear Quotation",
@@ -275,5 +389,7 @@ else:
     ):
 
         st.session_state.quotation_items = []
+
+        st.session_state.quotation_calculated = False
 
         st.rerun()
