@@ -3,6 +3,7 @@ from pricing import RAW_MATERIALS, OFFCUT_PRODUCTS
 
 PAN_LENGTH = 96
 PAN_WIDTH = 48
+HALF_PAN_WIDTH = 24
 STANDARD_BELT_WIDTH = 4
 
 
@@ -32,11 +33,14 @@ def calculate_standard_cut(
     offcut_value_override=None,
 ):
     """
-    Calculate quotation using the company's confirmed
-    standard 4-inch belt recovery rule.
+    Calculate quotation using Diamond Pans pricing rules.
 
-    A manual offcut value can be supplied when the
-    business chooses another use for the remaining material.
+    Confirmed standard-sheet rules:
+    - 96" × 48" = full 4ft × 8ft sheet -> zero belts.
+    - 96" × 24" = half 2ft × 8ft sheet -> zero belts.
+      Two 2ft × 8ft sheets make one 4ft × 8ft sheet.
+    - Other custom cuts use the standard 4-inch
+      belt recovery calculation.
     """
 
     length, width = normalize_dimensions(length, width)
@@ -45,6 +49,98 @@ def calculate_standard_cut(
         raise ValueError(
             "This order is larger than one standard 4ft × 8ft pan."
         )
+
+    # --------------------------------------------------
+    # STANDARD 4FT × 8FT FULL SHEET
+    # --------------------------------------------------
+
+    if length == PAN_LENGTH and width == PAN_WIDTH:
+
+        raw_price = RAW_MATERIALS["4x8"]["prices"].get(thickness)
+
+        if raw_price is None:
+            raise ValueError(
+                f"No 4ft × 8ft price available for {thickness}."
+            )
+
+        if raw_price_override is not None:
+            raw_price = raw_price_override
+
+        unit_price = raw_price
+        total_price = unit_price * quantity
+
+        return {
+            "length": length,
+            "width": width,
+            "thickness": thickness,
+            "quantity": quantity,
+
+            "raw_price": raw_price,
+
+            "remaining_length": 0,
+            "remaining_width": 0,
+
+            "length_belts": 0,
+            "width_belts": 0,
+            "total_belts": 0,
+            "belt_price": 0,
+
+            "standard_offcut_value": 0,
+            "final_offcut_value": 0,
+
+            "calculation_mode": "Standard 4ft × 8ft full sheet — no belt",
+
+            "unit_price": unit_price,
+            "total_price": total_price,
+        }
+
+    # --------------------------------------------------
+    # STANDARD 2FT × 8FT HALF SHEET
+    # --------------------------------------------------
+
+    if length == PAN_LENGTH and width == HALF_PAN_WIDTH:
+
+        raw_price = RAW_MATERIALS["2x8"]["prices"].get(thickness)
+
+        if raw_price is None:
+            raise ValueError(
+                f"No 2ft × 8ft price available for {thickness}."
+            )
+
+        if raw_price_override is not None:
+            raw_price = raw_price_override
+
+        unit_price = raw_price
+        total_price = unit_price * quantity
+
+        return {
+            "length": length,
+            "width": width,
+            "thickness": thickness,
+            "quantity": quantity,
+
+            "raw_price": raw_price,
+
+            "remaining_length": 0,
+            "remaining_width": 0,
+
+            "length_belts": 0,
+            "width_belts": 0,
+            "total_belts": 0,
+            "belt_price": 0,
+
+            "standard_offcut_value": 0,
+            "final_offcut_value": 0,
+
+            "calculation_mode": "Standard 2ft × 8ft half sheet — no belt",
+
+            "unit_price": unit_price,
+            "total_price": total_price,
+        }
+
+    # --------------------------------------------------
+    # CUSTOM CUT — STANDARD 4-INCH BELT RECOVERY
+    # --------------------------------------------------
 
     raw_price = RAW_MATERIALS["4x8"]["prices"].get(thickness)
 
@@ -56,9 +152,7 @@ def calculate_standard_cut(
     if raw_price_override is not None:
         raw_price = raw_price_override
 
-    belt_price = (
-        OFFCUT_PRODUCTS["4_belt"]["prices"].get(thickness)
-    )
+    belt_price = OFFCUT_PRODUCTS["4_belt"]["prices"].get(thickness)
 
     if belt_price is None:
         raise ValueError(
